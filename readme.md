@@ -23,7 +23,8 @@ cargo build
 ### Flashing the hardware
 
 ```sh
-cargo espflash flash --target xtensa-esp32-espidf --monitor
+# runner in .cargo/config.toml invokes `espflash flash --monitor`
+cargo run
 ```
 
 ## Setup

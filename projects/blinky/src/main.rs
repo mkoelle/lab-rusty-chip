@@ -1,12 +1,11 @@
 use std::thread;
 use std::time::Duration;
 
-use esp_idf_hal::{
-    gpio::{Level, PinDriver},
-    peripherals::Peripherals,
-};
+use esp_idf_svc::hal::{gpio::PinDriver, peripherals::Peripherals};
 
-fn main() {
+const BLINK_INTERVAL: Duration = Duration::from_millis(500);
+
+fn main() -> anyhow::Result<()> {
     // It is necessary to call this function once. Otherwise some patches to the runtime
     // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
     esp_idf_svc::sys::link_patches();
@@ -16,21 +15,14 @@ fn main() {
 
     log::info!("Hello, world!");
 
-    let peripherals = Peripherals::take().unwrap();
-    let pins = peripherals.pins;
-
-    let mut led = PinDriver::output(pins.gpio33).unwrap();
+    let peripherals = Peripherals::take()?;
+    let mut led = PinDriver::output(peripherals.pins.gpio33)?;
 
     loop {
-        if led.is_set_low() {
-            led.set_level(Level::High).expect("Failed to set LED high");
-            log::info!("LED is ON");
-        } else {
-            led.set_level(Level::Low).expect("Failed to set LED low");
-            log::info!("LED is OFF");
-        }
+        led.toggle()?;
+        log::info!("LED is {}", if led.is_set_high() { "ON" } else { "OFF" });
 
-        // thread::sleep to make sure the watchdog won't trigger
-        thread::sleep(Duration::from_millis(500));
+        // Sleeping yields to the scheduler so the watchdog won't trigger
+        thread::sleep(BLINK_INTERVAL);
     }
 }

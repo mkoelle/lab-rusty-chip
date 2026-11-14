@@ -1,8 +1,8 @@
-use anyhow::anyhow;
 use std::thread;
 use std::time::Duration;
 
-use esp_idf_hal::{
+use anyhow::anyhow;
+use esp_idf_svc::hal::{
     gpio::PinDriver,
     i2c::{I2cConfig, I2cDriver},
     peripherals::Peripherals,
@@ -18,7 +18,9 @@ use embedded_graphics::{
 
 use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
 
-fn main() {
+const FRAME_INTERVAL: Duration = Duration::from_millis(10);
+
+fn main() -> anyhow::Result<()> {
     // It is necessary to call this function once. Otherwise some patches to the runtime
     // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
     esp_idf_svc::sys::link_patches();
@@ -28,66 +30,42 @@ fn main() {
 
     log::info!("Hello, world!");
 
-    let peripherals = Peripherals::take().unwrap();
+    let peripherals = Peripherals::take()?;
     let pins = peripherals.pins;
-    let i2c = peripherals.i2c0;
-    let sda = pins.gpio21;
-    let scl = pins.gpio22;
 
-    let mut led = PinDriver::output(pins.gpio33).unwrap();
-    let mut led_two = PinDriver::output(pins.gpio2).unwrap();
+    let mut led = PinDriver::output(pins.gpio33)?;
+    let mut led_two = PinDriver::output(pins.gpio2)?;
 
     let config = I2cConfig::new().baudrate(400u32.kHz().into());
-    let i2c_driver = I2cDriver::new(i2c, sda, scl, &config)
-        .map_err(|e| anyhow!("I2C init error: {:?}", e))
-        .unwrap();
+    let i2c_driver = I2cDriver::new(peripherals.i2c0, pins.gpio21, pins.gpio22, &config)?;
 
+    // display-interface errors don't implement std::error::Error, so map them by hand
     let interface = I2CDisplayInterface::new(i2c_driver);
     let mut display = Ssd1306::new(interface, DisplaySize128x32, DisplayRotation::Rotate0)
         .into_buffered_graphics_mode();
-
     display
         .init()
-        .map_err(|e| anyhow!("Display init error: {:?}", e))
-        .unwrap();
-    display
-        .flush()
-        .map_err(|e| anyhow!("Flush error: {:?}", e))
-        .unwrap();
+        .map_err(|e| anyhow!("Display init error: {e:?}"))?;
 
     let style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
-    Text::new("Hello World !!!", Point::new(10, 0), style)
-        .draw(&mut display)
-        .map_err(|e| anyhow!("Draw error: {:?}", e))
-        .unwrap();
+    let mut count: u32 = 0;
 
-    display
-        .flush()
-        .map_err(|e| anyhow!("Final flush error: {:?}", e))
-        .unwrap();
-
-    let mut count = 0;
     loop {
-        let _ = led.toggle();
-        let _ = led_two.toggle();
+        led.toggle()?;
+        led_two.toggle()?;
 
-        let _ = display.clear(BinaryColor::Off);
+        display.clear_buffer();
         Text::new("Hello World !!!", Point::new(10, 12), style)
             .draw(&mut display)
-            .map_err(|e| anyhow!("Draw error: {:?}", e))
-            .unwrap();
-
+            .map_err(|e| anyhow!("Draw error: {e:?}"))?;
         Text::new(&count.to_string(), Point::new(10, 22), style)
             .draw(&mut display)
-            .map_err(|e| anyhow!("Draw error: {:?}", e))
-            .unwrap();
-        count += 1;
-        display
-            .flush()
-            .map_err(|e| anyhow!("Final flush error: {:?}", e))
-            .unwrap();
+            .map_err(|e| anyhow!("Draw error: {e:?}"))?;
+        display.flush().map_err(|e| anyhow!("Flush error: {e:?}"))?;
 
-        // thread::sleep to make sure the watchdog won't trigger
-        thread::sleep(Duration::from_millis(10));
+        count = count.wrapping_add(1);
+
+        // Sleeping yields to the scheduler so the watchdog won't trigger
+        thread::sleep(FRAME_INTERVAL);
     }
 }

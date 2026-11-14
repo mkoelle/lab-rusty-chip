@@ -1,12 +1,76 @@
+use std::fmt;
 use std::thread;
 use std::time::Duration;
 
-use esp_idf_hal::{
-    gpio::{Level, PinDriver, Pull},
+use esp_idf_svc::hal::{
+    gpio::{Input, InputPin, OutputPin, PinDriver, Pull},
+    peripheral::Peripheral,
     peripherals::Peripherals,
 };
+use esp_idf_svc::sys::EspError;
 
-fn main() {
+const FRAME_INTERVAL: Duration = Duration::from_millis(10);
+/// Number of frames each light stays on in auto mode.
+const FRAMES_PER_LIGHT: u32 = 50;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Light {
+    Red,
+    Green,
+    Yellow,
+}
+
+impl Light {
+    fn next(self) -> Self {
+        match self {
+            Light::Red => Light::Green,
+            Light::Green => Light::Yellow,
+            Light::Yellow => Light::Red,
+        }
+    }
+}
+
+impl fmt::Display for Light {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
+}
+
+/// Active-low push button with edge detection.
+struct Button<'d, P: InputPin> {
+    name: &'static str,
+    pin: PinDriver<'d, P, Input>,
+    pressed: bool,
+}
+
+impl<'d, P: InputPin + OutputPin> Button<'d, P> {
+    fn new(name: &'static str, pin: impl Peripheral<P = P> + 'd) -> Result<Self, EspError> {
+        let mut pin = PinDriver::input(pin)?;
+        pin.set_pull(Pull::Up)?;
+        Ok(Self {
+            name,
+            pin,
+            pressed: false,
+        })
+    }
+
+    /// Returns `true` once per press, on the falling edge.
+    fn just_pressed(&mut self) -> bool {
+        let is_down = self.pin.is_low();
+        let edge = is_down && !self.pressed;
+        if is_down != self.pressed {
+            log::info!(
+                "{} button {}",
+                self.name,
+                if is_down { "pressed" } else { "released" }
+            );
+            self.pressed = is_down;
+        }
+        edge
+    }
+}
+
+fn main() -> anyhow::Result<()> {
     // It is necessary to call this function once. Otherwise some patches to the runtime
     // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
     esp_idf_svc::sys::link_patches();
@@ -14,114 +78,47 @@ fn main() {
     // Bind the log crate to the ESP Logging facilities
     esp_idf_svc::log::EspLogger::initialize_default();
 
-    let peripherals = Peripherals::take().unwrap();
+    let peripherals = Peripherals::take()?;
     let pins = peripherals.pins;
 
-    let mut red_light = PinDriver::output(pins.gpio25).unwrap();
-    let mut green_light = PinDriver::output(pins.gpio33).unwrap();
-    let mut yellow_light = PinDriver::output(pins.gpio32).unwrap();
+    let mut red_light = PinDriver::output(pins.gpio25)?;
+    let mut green_light = PinDriver::output(pins.gpio33)?;
+    let mut yellow_light = PinDriver::output(pins.gpio32)?;
 
-    let mut advance_button = PinDriver::input(pins.gpio5).unwrap();
-    advance_button.set_pull(Pull::Up).unwrap();
-    let mut auto_button = PinDriver::input(pins.gpio18).unwrap();
-    auto_button.set_pull(Pull::Up).unwrap();
+    let mut advance_button = Button::new("Advance", pins.gpio5)?;
+    let mut auto_button = Button::new("Auto", pins.gpio18)?;
 
-    let mut is_advance_pressed = false;
-    let mut is_auto_pressed = false;
     let mut frames = 0;
-    let frame_length = 50;
-    let mut auto_mode = true; // Start in automatic mode
-    let mut current_light_state = 0; // 0: Red, 1: Green, 2: Yellow
+    let mut auto_mode = true;
+    let mut light = Light::Red;
 
     loop {
-        // Handle advance button (manual step through lights)
-        if advance_button.is_low() && !is_advance_pressed {
-            log::info!("Advance Button Pressed!");
-            is_advance_pressed = true;
-
-            if !auto_mode {
-                // Only advance manually when not in auto mode
-                current_light_state = (current_light_state + 1) % 3;
-                log::info!(
-                    "Manual advance to: {}",
-                    match current_light_state {
-                        0 => "Red",
-                        1 => "Green",
-                        2 => "Yellow",
-                        _ => "Unknown",
-                    }
-                );
-            }
-        } else if advance_button.is_high() && is_advance_pressed {
-            log::info!("Advance Button Released!");
-            is_advance_pressed = false;
+        // Advance button steps through the lights, only in manual mode
+        if advance_button.just_pressed() && !auto_mode {
+            light = light.next();
+            log::info!("Manual advance to: {light}");
         }
 
-        // Handle auto button (toggle automatic cycling)
-        if auto_button.is_low() && !is_auto_pressed {
-            log::info!("Auto Button Pressed!");
-            is_auto_pressed = true;
+        // Auto button toggles automatic cycling
+        if auto_button.just_pressed() {
             auto_mode = !auto_mode;
             log::info!("Auto mode: {}", if auto_mode { "ON" } else { "OFF" });
-
-            // Reset frame counter when switching modes
             frames = 0;
-        } else if auto_button.is_high() && is_auto_pressed {
-            log::info!("Auto Button Released!");
-            is_auto_pressed = false;
         }
 
-        // Handle automatic cycling
         if auto_mode {
             frames += 1;
-            if frames >= frame_length {
+            if frames >= FRAMES_PER_LIGHT {
                 frames = 0;
-                current_light_state = (current_light_state + 1) % 3;
+                light = light.next();
             }
         }
 
-        // Set light states based on current_light_state
-        match current_light_state {
-            0 => {
-                // Red light
-                red_light
-                    .set_level(Level::High)
-                    .expect("Failed to set RED high");
-                yellow_light
-                    .set_level(Level::Low)
-                    .expect("Failed to set YELLOW low");
-                green_light
-                    .set_level(Level::Low)
-                    .expect("Failed to set GREEN low");
-            }
-            1 => {
-                // Green light
-                red_light
-                    .set_level(Level::Low)
-                    .expect("Failed to set RED low");
-                yellow_light
-                    .set_level(Level::Low)
-                    .expect("Failed to set YELLOW low");
-                green_light
-                    .set_level(Level::High)
-                    .expect("Failed to set GREEN high");
-            }
-            2 => {
-                // Yellow light
-                red_light
-                    .set_level(Level::Low)
-                    .expect("Failed to set RED low");
-                yellow_light
-                    .set_level(Level::High)
-                    .expect("Failed to set YELLOW high");
-                green_light
-                    .set_level(Level::Low)
-                    .expect("Failed to set GREEN low");
-            }
-            _ => {} // Should never happen
-        }
+        red_light.set_level((light == Light::Red).into())?;
+        green_light.set_level((light == Light::Green).into())?;
+        yellow_light.set_level((light == Light::Yellow).into())?;
 
-        // thread::sleep to make sure the watchdog won't trigger
-        thread::sleep(Duration::from_millis(10));
+        // Sleeping yields to the scheduler so the watchdog won't trigger
+        thread::sleep(FRAME_INTERVAL);
     }
 }
