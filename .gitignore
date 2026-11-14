@@ -1,6 +1,7 @@
 .embuild
 target
-Cargo.lock
 
 *.log
 espressif
+# mise run setup output (machine-specific paths)
+.mise/

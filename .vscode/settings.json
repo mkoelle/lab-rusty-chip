@@ -1,0 +1,14 @@
+{
+    // No Cargo.toml at the repo root, so point rust-analyzer at each project explicitly.
+    "rust-analyzer.linkedProjects": [
+        "crates/Cargo.toml",
+        "projects/blinky/Cargo.toml",
+        "projects/oled_display/Cargo.toml",
+        "projects/stoplight_button/Cargo.toml"
+    ],
+    // Test/bench targets don't exist for the firmware targets
+    "rust-analyzer.check.allTargets": false,
+    "files.associations": {
+        "*.test.yaml": "yaml"
+    }
+}

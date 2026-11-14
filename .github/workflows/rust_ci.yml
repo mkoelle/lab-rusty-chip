@@ -12,6 +12,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # Keep in sync with ESP_TOOLCHAIN_VERSION in mise.toml
+  ESP_TOOLCHAIN_VERSION: "1.97.0.0"
 
 jobs:
   list-projects:
@@ -19,9 +21,27 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: set-matrix
         run: echo "matrix=$(ls -d projects/*/ | jq -R -s -c 'split("\n")[:-1]')" >> "$GITHUB_OUTPUT"
+
+  host-tests:
+    name: Host tests (crates/)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
 
   rust-checks:
     name: Rust Checks
@@ -40,13 +60,19 @@ jobs:
             args: --all-targets --all-features --workspace -- -D warnings
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Setup Rust
-        uses: esp-rs/xtensa-toolchain@v1.6
+        uses: esp-rs/xtensa-toolchain@v1.7.0
         with:
           default: true
           buildtargets: esp32
           ldproxy: true
+          version: ${{ env.ESP_TOOLCHAIN_VERSION }}
+      - name: Cache ESP-IDF
+        uses: actions/cache@v6
+        with:
+          path: ~/.espressif
+          key: esp-idf-${{ runner.os }}-${{ hashFiles(format('{0}.cargo/config.toml', matrix.manifest)) }}
       - name: Enable caching
         uses: Swatinem/rust-cache@v2
         with:
@@ -54,3 +80,50 @@ jobs:
       - name: Run command
         working-directory: ${{ matrix.manifest }}
         run: cargo ${{ matrix.action.command }} ${{ matrix.action.args }}
+
+  wokwi:
+    name: Wokwi simulation (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Projects with a scenario.test.yaml
+        project: [stoplight_button]
+    env:
+      WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Skip without Wokwi token
+        if: env.WOKWI_CLI_TOKEN == ''
+        run: echo "::notice::WOKWI_CLI_TOKEN secret not set; skipping simulation"
+      - name: Setup Rust
+        if: env.WOKWI_CLI_TOKEN != ''
+        uses: esp-rs/xtensa-toolchain@v1.7.0
+        with:
+          default: true
+          buildtargets: esp32
+          ldproxy: true
+          version: ${{ env.ESP_TOOLCHAIN_VERSION }}
+      - name: Cache ESP-IDF
+        if: env.WOKWI_CLI_TOKEN != ''
+        uses: actions/cache@v6
+        with:
+          path: ~/.espressif
+          key: esp-idf-${{ runner.os }}-${{ hashFiles(format('projects/{0}/.cargo/config.toml', matrix.project)) }}
+      - uses: Swatinem/rust-cache@v2
+        if: env.WOKWI_CLI_TOKEN != ''
+        with:
+          workspaces: projects/${{ matrix.project }}
+      - name: Build firmware (debug, as referenced by wokwi.toml)
+        if: env.WOKWI_CLI_TOKEN != ''
+        working-directory: projects/${{ matrix.project }}
+        run: cargo build
+      - name: Run scenario
+        if: env.WOKWI_CLI_TOKEN != ''
+        uses: wokwi/wokwi-ci-action@v1
+        with:
+          token: ${{ secrets.WOKWI_CLI_TOKEN }}
+          path: projects/${{ matrix.project }}
+          timeout: 30000
+          scenario: scenario.test.yaml

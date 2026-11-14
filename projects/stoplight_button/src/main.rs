@@ -1,72 +1,48 @@
-use std::fmt;
 use std::thread;
 use std::time::Duration;
 
 use esp_idf_svc::hal::{
-    gpio::{Input, InputPin, OutputPin, PinDriver, Pull},
-    peripheral::Peripheral,
+    gpio::{Input, InputPin, PinDriver, Pull},
     peripherals::Peripherals,
 };
 use esp_idf_svc::sys::EspError;
+use stoplight_logic::{ButtonEvent, Debouncer, Light, Stoplight};
 
 const FRAME_INTERVAL: Duration = Duration::from_millis(10);
-/// Number of frames each light stays on in auto mode.
+/// Number of frames each light stays on in auto mode (50 x 10ms = 500ms).
 const FRAMES_PER_LIGHT: u32 = 50;
+/// Readings a button must hold steady before a press/release counts (3 x 10ms = 30ms).
+const DEBOUNCE_FRAMES: u8 = 3;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Light {
-    Red,
-    Green,
-    Yellow,
-}
-
-impl Light {
-    fn next(self) -> Self {
-        match self {
-            Light::Red => Light::Green,
-            Light::Green => Light::Yellow,
-            Light::Yellow => Light::Red,
-        }
-    }
-}
-
-impl fmt::Display for Light {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(self, f)
-    }
-}
-
-/// Active-low push button with edge detection.
-struct Button<'d, P: InputPin> {
+/// Active-low push button with a pull-up, debounced in software.
+struct Button<'d> {
     name: &'static str,
-    pin: PinDriver<'d, P, Input>,
-    pressed: bool,
+    pin: PinDriver<'d, Input>,
+    debouncer: Debouncer,
 }
 
-impl<'d, P: InputPin + OutputPin> Button<'d, P> {
-    fn new(name: &'static str, pin: impl Peripheral<P = P> + 'd) -> Result<Self, EspError> {
-        let mut pin = PinDriver::input(pin)?;
-        pin.set_pull(Pull::Up)?;
+impl<'d> Button<'d> {
+    fn new(name: &'static str, pin: impl InputPin + 'd) -> Result<Self, EspError> {
         Ok(Self {
             name,
-            pin,
-            pressed: false,
+            pin: PinDriver::input(pin, Pull::Up)?,
+            debouncer: Debouncer::new(DEBOUNCE_FRAMES),
         })
     }
 
-    /// Returns `true` once per press, on the falling edge.
+    /// Reads the pin once; returns `true` on a debounced press.
     fn just_pressed(&mut self) -> bool {
-        let is_down = self.pin.is_low();
-        let edge = is_down && !self.pressed;
-        if is_down != self.pressed {
-            log::info!(
-                "{} button {}",
-                self.name,
-                if is_down { "pressed" } else { "released" }
-            );
-            self.pressed = is_down;
+        match self.debouncer.update(self.pin.is_low()) {
+            Some(ButtonEvent::Pressed) => {
+                log::info!("{} button pressed", self.name);
+                true
+            }
+            Some(ButtonEvent::Released) => {
+                log::info!("{} button released", self.name);
+                false
+            }
+            None => false,
         }
-        edge
     }
 }
 
@@ -88,32 +64,20 @@ fn main() -> anyhow::Result<()> {
     let mut advance_button = Button::new("Advance", pins.gpio5)?;
     let mut auto_button = Button::new("Auto", pins.gpio18)?;
 
-    let mut frames = 0;
-    let mut auto_mode = true;
-    let mut light = Light::Red;
+    let mut stoplight = Stoplight::new(FRAMES_PER_LIGHT);
+    log::info!("Stoplight ready, light: {}", stoplight.light());
 
     loop {
-        // Advance button steps through the lights, only in manual mode
-        if advance_button.just_pressed() && !auto_mode {
-            light = light.next();
-            log::info!("Manual advance to: {light}");
-        }
+        let changes = stoplight.tick(advance_button.just_pressed(), auto_button.just_pressed());
 
-        // Auto button toggles automatic cycling
-        if auto_button.just_pressed() {
-            auto_mode = !auto_mode;
+        if let Some(auto_mode) = changes.auto_mode {
             log::info!("Auto mode: {}", if auto_mode { "ON" } else { "OFF" });
-            frames = 0;
+        }
+        if let Some(light) = changes.light {
+            log::info!("Light: {light}");
         }
 
-        if auto_mode {
-            frames += 1;
-            if frames >= FRAMES_PER_LIGHT {
-                frames = 0;
-                light = light.next();
-            }
-        }
-
+        let light = stoplight.light();
         red_light.set_level((light == Light::Red).into())?;
         green_light.set_level((light == Light::Green).into())?;
         yellow_light.set_level((light == Light::Yellow).into())?;

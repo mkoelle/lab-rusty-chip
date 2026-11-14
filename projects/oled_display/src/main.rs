@@ -6,7 +6,7 @@ use esp_idf_svc::hal::{
     gpio::PinDriver,
     i2c::{I2cConfig, I2cDriver},
     peripherals::Peripherals,
-    prelude::*,
+    units::KiloHertz,
 };
 
 use embedded_graphics::{
@@ -36,7 +36,7 @@ fn main() -> anyhow::Result<()> {
     let mut led = PinDriver::output(pins.gpio33)?;
     let mut led_two = PinDriver::output(pins.gpio2)?;
 
-    let config = I2cConfig::new().baudrate(400u32.kHz().into());
+    let config = I2cConfig::new().baudrate(KiloHertz(400).into());
     let i2c_driver = I2cDriver::new(peripherals.i2c0, pins.gpio21, pins.gpio22, &config)?;
 
     // display-interface errors don't implement std::error::Error, so map them by hand
