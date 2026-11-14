@@ -15,34 +15,34 @@ steps:
   # Turn auto mode off while red
   - set-control:
       part-id: btn2
-      control: pressed
+      name: pressed
       value: 1
   - wait-serial: "Auto mode: OFF"
   - set-control:
       part-id: btn2
-      control: pressed
+      name: pressed
       value: 0
   - expect-pin:
       part-id: esp
-      pin: "25"
+      name: "25"
       value: 1
 
   # Advance button steps manually
   - set-control:
       part-id: btn1
-      control: pressed
+      name: pressed
       value: 1
   - wait-serial: "Light: Green"
   - set-control:
       part-id: btn1
-      control: pressed
+      name: pressed
       value: 0
   - delay: 100ms
   - expect-pin:
       part-id: esp
-      pin: "33"
+      name: "33"
       value: 1
   - expect-pin:
       part-id: esp
-      pin: "25"
+      name: "25"
       value: 0

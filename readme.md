@@ -62,7 +62,7 @@ Run `mise tasks` for the full list.
 | `mise run build <project>` | Build firmware |
 | `mise run flash <project>` | Flash a board and open the serial monitor |
 | `mise run monitor` | Serial monitor only |
-| `mise run sim <project>` | Build and run in the Wokwi simulator |
+| `mise run sim <project>` | Build and run headless in Wokwi, printing serial output |
 | `mise run test-sim <project>` | Run the project's Wokwi scenario test |
 | `mise run test` | Unit tests for `crates/` |
 | `mise run check` | fmt + clippy everywhere (what CI runs) |
@@ -84,7 +84,8 @@ Each project has a `diagram.json` (the virtual circuit) and `wokwi.toml` (which 
 A free Wokwi account is enough.
 
 - **VS Code:** install the recommended Wokwi extension, build the project, then run `Wokwi: Start Simulator` with `diagram.json` open.
-- **Command line:** create a token at [wokwi.com/dashboard/ci](https://wokwi.com/dashboard/ci), `export WOKWI_CLI_TOKEN=...`, then `mise run sim <project>`.
+- **Command line (headless, serial only):** create a token at [wokwi.com/dashboard/ci](https://wokwi.com/dashboard/ci), `export WOKWI_CLI_TOKEN=...`, then `mise run sim <project>`.
+  `mise run sim-debug <project>` starts paused until gdb attaches on port 3333.
 - **Automated tests:** a `scenario.test.yaml` in a project presses buttons and checks serial output and pin levels.
   `mise run test-sim stoplight_button` runs it locally; CI runs it when the `WOKWI_CLI_TOKEN` repository secret is set.
 
@@ -103,7 +104,7 @@ cd projects
 cargo generate esp-rs/esp-idf-template cargo   # choose esp32, std
 ```
 
-Then copy `diagram.json`, `wokwi.toml` and the `ESP_IDF_TOOLS_INSTALL_DIR` line in `.cargo/config.toml` from an existing project, and add it to `.vscode/settings.json`.
+Then copy `diagram.json`, `wokwi.toml`, `sdkconfig.defaults` and the `ESP_IDF_TOOLS_INSTALL_DIR` line in `.cargo/config.toml` from an existing project, and add it to `.vscode/settings.json`.
 
 ## Windows
 

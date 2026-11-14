@@ -43,9 +43,14 @@ description = "Open the serial monitor without flashing"
 run = "espflash monitor"
 
 [tasks.sim]
-description = "Build then run a project in the Wokwi simulator (needs WOKWI_CLI_TOKEN)"
+description = "Build then run headless in Wokwi, printing serial for 5 minutes (needs WOKWI_CLI_TOKEN). Use the VS Code extension to click parts."
 usage = 'arg "<project>" help="folder under projects/"'
-run = 'cd "projects/$usage_project" && cargo build && wokwi-cli --timeout 30000 .'
+run = 'cd "projects/$usage_project" && cargo build && wokwi-cli --timeout 300000 --timeout-exit-code 0 .'
+
+[tasks.sim-debug]
+description = "Like sim, but paused until gdb attaches on port 3333"
+usage = 'arg "<project>" help="folder under projects/"'
+run = 'cd "projects/$usage_project" && cargo build && wokwi-cli --timeout 3600000 --gdb-server-port 3333 .'
 
 [tasks.test-sim]
 description = "Run a project's Wokwi scenario test (needs WOKWI_CLI_TOKEN)"

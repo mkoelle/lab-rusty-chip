@@ -3,5 +3,16 @@
 version = 3
 
 [[package]]
+name = "atomizer-logic"
+version = "0.1.0"
+
+[[package]]
+name = "debounce"
+version = "0.1.0"
+
+[[package]]
 name = "stoplight-logic"
 version = "0.1.0"
+dependencies = [
+ "debounce",
+]

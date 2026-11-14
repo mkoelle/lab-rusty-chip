@@ -2,6 +2,7 @@
     // No Cargo.toml at the repo root, so point rust-analyzer at each project explicitly.
     "rust-analyzer.linkedProjects": [
         "crates/Cargo.toml",
+        "projects/atomizer/Cargo.toml",
         "projects/blinky/Cargo.toml",
         "projects/oled_display/Cargo.toml",
         "projects/stoplight_button/Cargo.toml"

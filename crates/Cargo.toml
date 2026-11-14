@@ -2,4 +2,4 @@
 # and pulled into firmware projects as path dependencies.
 [workspace]
 resolver = "2"
-members = ["stoplight-logic"]
+members = ["atomizer-logic", "debounce", "stoplight-logic"]

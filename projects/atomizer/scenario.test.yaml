@@ -1,0 +1,34 @@
+# Wokwi scenario test: `mise run test-sim atomizer` locally, or the wokwi job in CI.
+# mode_btn = GPIO19; board power LED = GPIO26 (MOSFET gate); trigger LED = GPIO27 (optocoupler).
+# Water-low handling is covered by unit tests in crates/atomizer-logic: slide switches have no scenario control.
+name: Atomizer mode cycle
+version: 1
+author: rusty-chip
+
+steps:
+  - wait-serial: "Atomizer ready"
+  - expect-pin: { part-id: esp, name: "26", value: 0 }
+
+  # Press 1: Off -> On. Board is powered, settles, then gets one trigger press.
+  - set-control: { part-id: mode_btn, name: pressed, value: 1 }
+  - delay: 100ms
+  - set-control: { part-id: mode_btn, name: pressed, value: 0 }
+  - wait-serial: "Target: On"
+  - wait-serial: "Board: On"
+  - expect-pin: { part-id: esp, name: "26", value: 1 }
+
+  # Press 2: On -> Timed. One more trigger press, power stays on.
+  - set-control: { part-id: mode_btn, name: pressed, value: 1 }
+  - delay: 100ms
+  - set-control: { part-id: mode_btn, name: pressed, value: 0 }
+  - wait-serial: "Target: Timed"
+  - wait-serial: "Board: Timed"
+  - expect-pin: { part-id: esp, name: "26", value: 1 }
+
+  # Press 3: Timed -> Off. Power is cut instead of pressing the trigger.
+  - set-control: { part-id: mode_btn, name: pressed, value: 1 }
+  - delay: 100ms
+  - set-control: { part-id: mode_btn, name: pressed, value: 0 }
+  - wait-serial: "Board: Off"
+  - expect-pin: { part-id: esp, name: "26", value: 0 }
+  - expect-pin: { part-id: esp, name: "27", value: 0 }
