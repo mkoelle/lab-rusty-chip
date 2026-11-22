@@ -1,0 +1,8 @@
+[package]
+name = "atomizer-logic"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+description = "Drives an ultrasonic atomizer control board through its power and push-button trigger"
+
+[dependencies]

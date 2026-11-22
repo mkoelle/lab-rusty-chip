@@ -1,0 +1,5 @@
+# Hardware-independent crates. Built and tested on the host with stable Rust (`mise run test`),
+# and pulled into firmware projects as path dependencies.
+[workspace]
+resolver = "2"
+members = ["atomizer-logic", "debounce", "stoplight-logic"]

@@ -1,0 +1,9 @@
+[package]
+name = "stoplight-logic"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+description = "Hardware-independent stoplight state machine and button debouncing"
+
+[dependencies]
+debounce = { path = "../debounce" }

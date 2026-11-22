@@ -1,0 +1,9 @@
+# ESP-IDF build options (read by esp-idf-sys). Run `cargo clean` after changing this file.
+
+# Rust std code needs more main-task stack than ESP-IDF's 3K default
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8000
+
+# esp-idf-hal's I2cDriver wraps ESP-IDF's legacy I2C driver, which logs
+# "This driver is an old driver, please migrate..." at boot. Nothing here uses the new
+# driver, so the startup conflict check (and its warning) can be skipped.
+CONFIG_I2C_SKIP_LEGACY_CONFLICT_CHECK=y

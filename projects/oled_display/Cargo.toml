@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["mkoelle"]
 edition = "2021"
 resolver = "2"
-rust-version = "1.77"
+rust-version = "1.82"
 
 [[bin]]
 name = "rusty-chip"
@@ -23,11 +23,10 @@ experimental = ["esp-idf-svc/experimental"]
 
 [dependencies]
 log = "0.4"
-esp-idf-svc = "0.51"
-esp-idf-hal = "0.45.2"
-anyhow = "1.0.99"
-embedded-graphics = "0.8.1"
-ssd1306 = "0.10.0"
+esp-idf-svc = "0.53"
+anyhow = "1"
+embedded-graphics = "0.8.2"
+ssd1306 = "0.10"
 
 [build-dependencies]
-embuild = "0.33"
+embuild = "0.33.7"

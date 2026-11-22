@@ -1,0 +1,73 @@
+# Project tooling. Run `mise install && mise run setup` once, then `mise tasks` to see what's available.
+# Versions are pinned so every machine and CI build with the same tools.
+
+[settings]
+# Prefer prebuilt binaries over compiling cargo tools from source
+cargo.binstall = true
+
+[tools]
+cargo-binstall = "1.27.0"
+"cargo:espup" = "0.19.0"
+"cargo:espflash" = "4.7.0"
+"cargo:ldproxy" = "0.3.5"
+"github:wokwi/wokwi-cli" = "0.29.1"
+
+[env]
+# A global mise `rust` tool exports RUSTUP_TOOLCHAIN, which overrides each project's
+# rust-toolchain.toml (`channel = "esp"`). Unset it so the per-folder toolchain file wins.
+RUSTUP_TOOLCHAIN = false
+# Xtensa toolchain version installed by `espup`. Keep in sync with `version:` in .github/workflows/rust_ci.yml
+ESP_TOOLCHAIN_VERSION = "1.97.0.0"
+# Written by `mise run setup`; adds the Xtensa GCC and libclang to PATH / LIBCLANG_PATH
+_.source = { path = "{{config_root}}/.mise/export-esp.sh", tools = true }
+
+[tasks.setup]
+description = "Install the Xtensa Rust toolchain for ESP32 (once per machine)"
+run = [
+  "mkdir -p {{config_root}}/.mise",
+  "espup install --targets esp32 --toolchain-version $ESP_TOOLCHAIN_VERSION --export-file {{config_root}}/.mise/export-esp.sh",
+]
+
+[tasks.build]
+description = "Build firmware for a project: mise run build <project>"
+usage = 'arg "<project>" help="folder under projects/"'
+run = 'cd "projects/$usage_project" && cargo build'
+
+[tasks.flash]
+description = "Flash and monitor a board: mise run flash <project> (set ESPFLASH_PORT to pick a board)"
+usage = 'arg "<project>" help="folder under projects/"'
+run = 'cd "projects/$usage_project" && cargo run'
+
+[tasks.monitor]
+description = "Open the serial monitor without flashing"
+run = "espflash monitor"
+
+[tasks.sim]
+description = "Build then run headless in Wokwi, printing serial for 5 minutes (needs WOKWI_CLI_TOKEN). Use the VS Code extension to click parts."
+usage = 'arg "<project>" help="folder under projects/"'
+run = 'cd "projects/$usage_project" && cargo build && wokwi-cli --timeout 300000 --timeout-exit-code 0 .'
+
+[tasks.sim-debug]
+description = "Like sim, but paused until gdb attaches on port 3333"
+usage = 'arg "<project>" help="folder under projects/"'
+run = 'cd "projects/$usage_project" && cargo build && wokwi-cli --timeout 3600000 --gdb-server-port 3333 .'
+
+[tasks.test-sim]
+description = "Run a project's Wokwi scenario test (needs WOKWI_CLI_TOKEN)"
+usage = 'arg "<project>" help="folder under projects/"'
+run = 'cd "projects/$usage_project" && cargo build && wokwi-cli --timeout 30000 --scenario scenario.test.yaml .'
+
+[tasks.test]
+description = "Run host-side unit tests for hardware-independent crates"
+dir = "{{config_root}}/crates"
+run = "cargo test --workspace"
+
+[tasks.check]
+description = "fmt + clippy across every project and crate (same as CI)"
+run = '''
+set -e
+for dir in projects/*/ crates/; do
+  echo "== $dir"
+  (cd "$dir" && cargo fmt --all -- --check && cargo clippy --all-targets -- -D warnings)
+done
+'''

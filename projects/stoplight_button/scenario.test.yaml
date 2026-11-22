@@ -1,0 +1,48 @@
+# Wokwi scenario test: `mise run test-sim stoplight_button` locally, or the wokwi job in CI.
+# btn1 = Advance (GPIO5), btn2 = Auto (GPIO18); LEDs: red GPIO25, yellow GPIO32, green GPIO33.
+name: Stoplight buttons
+version: 1
+author: rusty-chip
+
+steps:
+  - wait-serial: "Stoplight ready, light: Red"
+
+  # Auto mode cycles through every light on its own
+  - wait-serial: "Light: Green"
+  - wait-serial: "Light: Yellow"
+  - wait-serial: "Light: Red"
+
+  # Turn auto mode off while red
+  - set-control:
+      part-id: btn2
+      name: pressed
+      value: 1
+  - wait-serial: "Auto mode: OFF"
+  - set-control:
+      part-id: btn2
+      name: pressed
+      value: 0
+  - expect-pin:
+      part-id: esp
+      name: "25"
+      value: 1
+
+  # Advance button steps manually
+  - set-control:
+      part-id: btn1
+      name: pressed
+      value: 1
+  - wait-serial: "Light: Green"
+  - set-control:
+      part-id: btn1
+      name: pressed
+      value: 0
+  - delay: 100ms
+  - expect-pin:
+      part-id: esp
+      name: "33"
+      value: 1
+  - expect-pin:
+      part-id: esp
+      name: "25"
+      value: 0
